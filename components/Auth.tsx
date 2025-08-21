@@ -18,7 +18,7 @@ export default function Auth() {
       if (error) {
         Alert.alert(`Login Error: ${error.message}`);
       }
-    } catch (err) {
+    } catch {
       Alert.alert(
         "Network Error",
         "Failed to connect. Check your internet connection.",
