@@ -10,10 +10,11 @@ import {
   Alert,
   Dimensions,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Session } from "@supabase/supabase-js";
+import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import DashboardHeader from "@/components/DashboardHeader";
 
 const { width } = Dimensions.get("window");
 
@@ -52,18 +53,31 @@ export default function DashboardScreen({ session }: DashboardScreenProps) {
     ]);
   };
 
+  const handleMenuItemPress = (title: string) => {
+    switch (title) {
+      case "Skanuj dzieło":
+        router.push("/scan-artwork");
+        break;
+      case "Moja kolekcja":
+        router.push("/collection");
+        break;
+      case "Osiągnięcia":
+        router.push("/coming-soon?feature=achievements");
+        break;
+      case "Wydarzenia":
+        router.push("/coming-soon?feature=events");
+        break;
+      default:
+        break;
+    }
+  };
+
   const menuItems = [
     {
       icon: "camera-outline",
       title: "Skanuj dzieło",
       subtitle: "Użyj AI do identyfikacji i nauki o sztuce",
       color: "#667eea",
-    },
-    {
-      icon: "map-outline",
-      title: "Mapa muzeum",
-      subtitle: "Nawiguj przez wystawy",
-      color: "#f093fb",
     },
     {
       icon: "bookmark-outline",
@@ -78,12 +92,6 @@ export default function DashboardScreen({ session }: DashboardScreenProps) {
       color: "#fce38a",
     },
     {
-      icon: "headset-outline",
-      title: "Przewodniki audio",
-      subtitle: "Słuchaj kuratorskich doświadczeń",
-      color: "#95e1d3",
-    },
-    {
       icon: "calendar-outline",
       title: "Wydarzenia",
       subtitle: "Odkryj nadchodzące wystawy",
@@ -92,28 +100,14 @@ export default function DashboardScreen({ session }: DashboardScreenProps) {
   ];
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.header}>
-        <View style={styles.headerContent}>
-          <View>
-            <Text style={styles.greeting}>Witaj ponownie!</Text>
-            <Text style={styles.userName}>
-              {session.user.email?.split("@")[0]}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.avatar}
-            onPress={() => setShowUserMenu(true)}
-          >
-            <Text style={styles.avatarText}>
-              {getUserInitials(session.user.email || "")}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </LinearGradient>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+    <DashboardHeader
+      session={session}
+      onAvatarPress={() => setShowUserMenu(true)}
+    >
+      <ScrollView
+        style={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.quickActions}>
           <Text style={styles.sectionTitle}>Szybkie akcje</Text>
           <View style={styles.menuGrid}>
@@ -122,6 +116,7 @@ export default function DashboardScreen({ session }: DashboardScreenProps) {
                 key={index}
                 style={[styles.menuItem, { backgroundColor: item.color }]}
                 activeOpacity={0.8}
+                onPress={() => handleMenuItemPress(item.title)}
               >
                 <Ionicons name={item.icon as any} size={32} color="#FFFFFF" />
                 <Text style={styles.menuTitle}>{item.title}</Text>
@@ -131,28 +126,29 @@ export default function DashboardScreen({ session }: DashboardScreenProps) {
           </View>
         </View>
 
-        <View style={styles.recentSection}>
-          <Text style={styles.sectionTitle}>Ostatnia aktywność</Text>
-          <View style={styles.activityCard}>
-            <View style={styles.activityItem}>
-              <Ionicons name="camera" size={24} color="#667eea" />
-              <View style={styles.activityText}>
-                <Text style={styles.activityTitle}>
-                  Zeskanowano &quot;Gwiaździstą noc&quot;
-                </Text>
-                <Text style={styles.activityTime}>2 godziny temu</Text>
-              </View>
-            </View>
-            <View style={styles.activityItem}>
-              <Ionicons name="bookmark" size={24} color="#4ecdc4" />
-              <View style={styles.activityText}>
-                <Text style={styles.activityTitle}>Zapisano do kolekcji</Text>
-                <Text style={styles.activityTime}>1 dzień temu</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+        {/*<View style={styles.recentSection}>*/}
+        {/*  <Text style={styles.sectionTitle}>Ostatnia aktywność</Text>*/}
+        {/*  <View style={styles.activityCard}>*/}
+        {/*    <View style={styles.activityItem}>*/}
+        {/*      <Ionicons name="camera" size={24} color="#667eea" />*/}
+        {/*      <View style={styles.activityText}>*/}
+        {/*        <Text style={styles.activityTitle}>*/}
+        {/*          Zeskanowano &quot;Gwiaździstą noc&quot;*/}
+        {/*        </Text>*/}
+        {/*        <Text style={styles.activityTime}>2 godziny temu</Text>*/}
+        {/*      </View>*/}
+        {/*    </View>*/}
+        {/*    <View style={styles.activityItem}>*/}
+        {/*      <Ionicons name="bookmark" size={24} color="#4ecdc4" />*/}
+        {/*      <View style={styles.activityText}>*/}
+        {/*        <Text style={styles.activityTitle}>Zapisano do kolekcji</Text>*/}
+        {/*        <Text style={styles.activityTime}>1 dzień temu</Text>*/}
+        {/*      </View>*/}
+        {/*    </View>*/}
+        {/*  </View>*/}
+        {/*</View>*/}
       </ScrollView>
+      <SafeAreaView style={styles.bottomSafeArea} />
 
       <Modal
         visible={showUserMenu}
@@ -204,7 +200,7 @@ export default function DashboardScreen({ session }: DashboardScreenProps) {
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </DashboardHeader>
   );
 }
 
@@ -212,6 +208,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8fafc",
+  },
+  gradientContainer: {
+    maxHeight: 150,
+  },
+  topSafeArea: {
+    // No flex here either
   },
   header: {
     paddingHorizontal: 20,
@@ -251,7 +253,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    flex: 1,
     paddingHorizontal: 20,
+  },
+  bottomSafeArea: {
+    backgroundColor: "#f8fafc",
   },
   quickActions: {
     marginTop: 20,
