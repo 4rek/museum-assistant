@@ -1,0 +1,2 @@
+-- This is a placeholder seed file to satisfy the config.toml requirement
+-- Add your database seeding commands here if needed
