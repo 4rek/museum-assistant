@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { View, Text, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { StyleSheet } from 'react-native'
+import { RateLimitError } from '@/lib/conversationService'
 
 interface PhotoPickerProps {
   onAnalysisComplete: (analysis: string) => void
@@ -119,7 +120,17 @@ export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: Pho
       onAnalysisComplete(data.analysis)
     } catch (error) {
       console.error('Analysis error:', error)
-      Alert.alert('Analysis Error', error instanceof Error ? error.message : 'Failed to analyze the artwork')
+      
+      if (error instanceof RateLimitError) {
+        const waitMinutes = Math.ceil(error.retryAfter / 60)
+        Alert.alert(
+          'Rate Limit Exceeded',
+          `You've reached the limit of 10 interactions in 5 minutes. Please wait ${waitMinutes} minutes before trying again.`,
+          [{ text: 'OK' }]
+        )
+      } else {
+        Alert.alert('Analysis Error', error instanceof Error ? error.message : 'Failed to analyze the artwork')
+      }
     } finally {
       setIsAnalyzing(false)
     }

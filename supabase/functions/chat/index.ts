@@ -3,6 +3,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from "../_shared/cors.ts"
 import { RateLimiter, DEFAULT_RATE_LIMITS, createRateLimitHeaders } from "../_shared/rateLimiter.ts"
 
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -56,8 +61,8 @@ serve(async (req) => {
       const rateLimiter = new RateLimiter()
       const rateLimitResult = await rateLimiter.checkRateLimit({
         identifier: user.id,
-        maxRequests: DEFAULT_RATE_LIMITS.ANALYSIS.maxRequests,
-        windowMs: DEFAULT_RATE_LIMITS.ANALYSIS.windowMs
+        maxRequests: DEFAULT_RATE_LIMITS.CHAT.maxRequests,
+        windowMs: DEFAULT_RATE_LIMITS.CHAT.windowMs
       })
 
       const rateLimitHeaders = createRateLimitHeaders(rateLimitResult)
@@ -65,7 +70,7 @@ serve(async (req) => {
       if (!rateLimitResult.success) {
         return new Response(
           JSON.stringify({ 
-            error: 'Rate limit exceeded. Please wait before analyzing more artwork.',
+            error: 'Rate limit exceeded. Please wait before sending more messages.',
             retryAfter: Math.ceil((rateLimitResult.reset - Date.now()) / 1000)
           }),
           { 
@@ -83,11 +88,11 @@ serve(async (req) => {
       // Continue processing if rate limiting fails
     }
 
-    const { image, prompt, createConversation = false, imageUrl } = await req.json()
+    const { conversationId, message, createNew, title, artworkImageUrl } = await req.json()
 
-    if (!image) {
+    if (!message) {
       return new Response(
-        JSON.stringify({ error: 'Image is required' }),
+        JSON.stringify({ error: 'Message is required' }),
         { 
           status: 400, 
           headers: { 
@@ -98,6 +103,94 @@ serve(async (req) => {
       )
     }
 
+    let currentConversationId = conversationId
+
+    // Create new conversation if requested
+    if (createNew || !currentConversationId) {
+      const { data: newConversation, error: createError } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: user.id,
+          title: title || 'New Conversation',
+          artwork_image_url: artworkImageUrl || null
+        })
+        .select()
+        .single()
+
+      if (createError) {
+        console.error('Error creating conversation:', createError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to create conversation' }),
+          { 
+            status: 500, 
+            headers: { 
+              ...corsHeaders, 
+              'Content-Type': 'application/json' 
+            } 
+          }
+        )
+      }
+
+      currentConversationId = newConversation.id
+    }
+
+    // Get conversation history
+    const { data: messages, error: historyError } = await supabase
+      .from('messages')
+      .select('content, role, created_at')
+      .eq('conversation_id', currentConversationId)
+      .order('created_at', { ascending: true })
+
+    if (historyError) {
+      console.error('Error fetching conversation history:', historyError)
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch conversation history' }),
+        { 
+          status: 500, 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      )
+    }
+
+    // Add user message to database
+    const { error: userMessageError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: currentConversationId,
+        content: message,
+        role: 'user'
+      })
+
+    if (userMessageError) {
+      console.error('Error saving user message:', userMessageError)
+      return new Response(
+        JSON.stringify({ error: 'Failed to save user message' }),
+        { 
+          status: 500, 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      )
+    }
+
+    // Prepare conversation history for OpenAI
+    const conversationHistory: ChatMessage[] = messages.map(msg => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content
+    }))
+
+    // Add the new user message
+    conversationHistory.push({
+      role: 'user',
+      content: message
+    })
+
+    // Call OpenAI
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
     
     if (!openaiApiKey) {
@@ -121,24 +214,9 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: prompt || 'Analyze this artwork. Describe what you see, the artistic style, possible time period, and any notable features or techniques used.'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:image/jpeg;base64,${image}`
-                }
-              }
-            ]
-          }
-        ],
-        max_tokens: 500
+        messages: conversationHistory,
+        max_tokens: 500,
+        temperature: 0.7
       })
     })
 
@@ -148,7 +226,7 @@ serve(async (req) => {
       console.error('OpenAI API Error:', openaiResponse)
       return new Response(
         JSON.stringify({ 
-          error: 'Failed to analyze artwork', 
+          error: 'Failed to get AI response', 
           details: openaiResponse.error?.message 
         }),
         { 
@@ -161,42 +239,35 @@ serve(async (req) => {
       )
     }
 
-    const analysis = openaiResponse.choices?.[0]?.message?.content || 'No analysis available'
+    const aiMessage = openaiResponse.choices?.[0]?.message?.content || 'No response available'
 
-    let conversationId = null
+    // Save AI response to database
+    const { error: aiMessageError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: currentConversationId,
+        content: aiMessage,
+        role: 'assistant'
+      })
 
-    // Create conversation if requested
-    if (createConversation) {
-      const { data: newConversation, error: createError } = await supabase
-        .from('conversations')
-        .insert({
-          user_id: user.id,
-          title: 'Artwork Analysis',
-          artwork_image_url: imageUrl || null
-        })
-        .select()
-        .single()
-
-      if (createError) {
-        console.error('Error creating conversation:', createError)
-      } else {
-        conversationId = newConversation.id
-
-        // Add the analysis as the first assistant message
-        await supabase
-          .from('messages')
-          .insert({
-            conversation_id: conversationId,
-            content: analysis,
-            role: 'assistant'
-          })
-      }
+    if (aiMessageError) {
+      console.error('Error saving AI message:', aiMessageError)
+      return new Response(
+        JSON.stringify({ error: 'Failed to save AI message' }),
+        { 
+          status: 500, 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          } 
+        }
+      )
     }
 
     return new Response(
       JSON.stringify({ 
-        analysis,
-        conversationId,
+        message: aiMessage,
+        conversationId: currentConversationId,
         usage: openaiResponse.usage 
       }),
       { 

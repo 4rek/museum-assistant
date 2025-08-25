@@ -16,7 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import HeaderContainer from "@/components/HeaderContainer";
-import { conversationService, type Message as ConversationMessage } from "@/lib/conversationService";
+import { conversationService, type Message as ConversationMessage, RateLimitError } from "@/lib/conversationService";
 
 const { width, height } = Dimensions.get("window");
 
@@ -129,9 +129,22 @@ export default function ArtworkChatScreen() {
     } catch (error) {
       console.error('Analysis error:', error);
       
+      let errorText = "Przepraszam, wystąpił błąd podczas analizowania dzieła. Spróbuj ponownie później.";
+      
+      if (error instanceof RateLimitError) {
+        const waitMinutes = Math.ceil(error.retryAfter / 60);
+        errorText = `Osiągnięto limit zapytań. Spróbuj ponownie za ${waitMinutes} minut. Limit to 10 interakcji w ciągu 5 minut.`;
+        
+        Alert.alert(
+          'Limit zapytań',
+          `Osiągnięto limit 10 interakcji w ciągu 5 minut. Spróbuj ponownie za ${waitMinutes} minut.`,
+          [{ text: 'OK' }]
+        );
+      }
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: "Przepraszam, wystąpił błąd podczas analizowania dzieła. Spróbuj ponownie później.",
+        text: errorText,
         isUser: false,
         timestamp: new Date(),
       };
@@ -195,9 +208,22 @@ export default function ArtworkChatScreen() {
     } catch (error) {
       console.error('Send message error:', error);
       
+      let errorText = "Przepraszam, wystąpił błąd podczas wysyłania wiadomości. Spróbuj ponownie.";
+      
+      if (error instanceof RateLimitError) {
+        const waitMinutes = Math.ceil(error.retryAfter / 60);
+        errorText = `Osiągnięto limit zapytań. Spróbuj ponownie za ${waitMinutes} minut. Limit to 10 interakcji w ciągu 5 minut.`;
+        
+        Alert.alert(
+          'Limit zapytań',
+          `Osiągnięto limit 10 interakcji w ciągu 5 minut. Spróbuj ponownie za ${waitMinutes} minut.`,
+          [{ text: 'OK' }]
+        );
+      }
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: "Przepraszam, wystąpił błąd podczas wysyłania wiadomości. Spróbuj ponownie.",
+        text: errorText,
         isUser: false,
         timestamp: new Date(),
       };
