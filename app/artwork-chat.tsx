@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import HeaderContainer from "@/components/HeaderContainer";
+import { conversationService, type Message as ConversationMessage } from "@/lib/conversationService";
 
 const { width, height } = Dimensions.get("window");
 
@@ -27,11 +28,17 @@ interface Message {
 }
 
 export default function ArtworkChatScreen() {
-  const { imageUri } = useLocalSearchParams<{ imageUri: string }>();
+  const { imageUri, conversationId } = useLocalSearchParams<{ 
+    imageUri?: string; 
+    conversationId?: string; 
+  }>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(
+    conversationId || null
+  );
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Remove auto-analysis on mount
@@ -41,8 +48,34 @@ export default function ArtworkChatScreen() {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
 
+  useEffect(() => {
+    // Load existing conversation if conversationId is provided
+    if (conversationId) {
+      loadConversation(conversationId);
+    }
+  }, [conversationId]);
+
+  const loadConversation = async (convId: string) => {
+    try {
+      const { conversation, messages: convMessages } = await conversationService.getConversation(convId);
+      
+      const formattedMessages: Message[] = convMessages.map(msg => ({
+        id: msg.id,
+        text: msg.content,
+        isUser: msg.role === 'user',
+        timestamp: new Date(msg.created_at)
+      }));
+
+      setMessages(formattedMessages);
+      setHasAnalyzed(true); // Assume conversation already has analysis
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+      Alert.alert('Error', 'Failed to load conversation');
+    }
+  };
+
   const analyzeArtwork = async () => {
-    if (hasAnalyzed) return;
+    if (hasAnalyzed || !imageUri) return;
 
     setIsAnalyzing(true);
     setHasAnalyzed(true);
@@ -72,28 +105,21 @@ export default function ArtworkChatScreen() {
         reader.readAsDataURL(blob);
       });
 
-      // Call the analyze-artwork edge function
-      const analysisResponse = await fetch('http://127.0.0.1:54321/functions/v1/analyze-artwork', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0`,
-        },
-        body: JSON.stringify({
-          image: base64Data,
-          prompt: 'Analyze this artwork in Polish. Describe what you see, the artistic style, possible time period, and any notable features or techniques used. Be detailed and educational.'
-        }),
-      });
+      // Use the conversation service to analyze and create conversation
+      const { analysis, conversationId: newConversationId } = await conversationService.analyzeArtwork(
+        base64Data,
+        'Analyze this artwork in Polish. Describe what you see, the artistic style, possible time period, and any notable features or techniques used. Be detailed and educational.',
+        true, // Create conversation
+        decodeURIComponent(imageUri)
+      );
 
-      const data = await analysisResponse.json();
-
-      if (!analysisResponse.ok) {
-        throw new Error(data.error || 'Failed to analyze artwork');
+      if (newConversationId) {
+        setCurrentConversationId(newConversationId);
       }
 
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: `🎨 **Analiza dzieła sztuki**\n\n${data.analysis}`,
+        text: `🎨 **Analiza dzieła sztuki**\n\n${analysis}`,
         isUser: false,
         timestamp: new Date(),
       };
@@ -116,12 +142,13 @@ export default function ArtworkChatScreen() {
     }
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!inputText.trim()) return;
 
+    const messageText = inputText.trim();
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: inputText.trim(),
+      text: messageText,
       isUser: true,
       timestamp: new Date(),
     };
@@ -129,20 +156,55 @@ export default function ArtworkChatScreen() {
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
 
-    // Simulate AI response
-    setTimeout(
-      () => {
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          text: generateAIResponse(inputText.trim()),
-          isUser: false,
-          timestamp: new Date(),
-        };
+    // Add typing indicator
+    const typingMessage: Message = {
+      id: 'typing',
+      text: '...',
+      isUser: false,
+      timestamp: new Date(),
+    };
 
-        setMessages((prev) => [...prev, aiResponse]);
-      },
-      1000 + Math.random() * 2000,
-    );
+    setMessages((prev) => [...prev, typingMessage]);
+
+    try {
+      let conversationIdToUse = currentConversationId;
+
+      // Create new conversation if none exists
+      if (!conversationIdToUse) {
+        conversationIdToUse = await conversationService.createConversation(
+          'Artwork Chat',
+          imageUri ? decodeURIComponent(imageUri) : undefined
+        );
+        setCurrentConversationId(conversationIdToUse);
+      }
+
+      const response = await conversationService.sendMessage(
+        messageText,
+        conversationIdToUse
+      );
+
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: response.message,
+        isUser: false,
+        timestamp: new Date(),
+      };
+
+      // Remove typing indicator and add real response
+      setMessages((prev) => [...prev.slice(0, -1), aiResponse]);
+    } catch (error) {
+      console.error('Send message error:', error);
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "Przepraszam, wystąpił błąd podczas wysyłania wiadomości. Spróbuj ponownie.",
+        isUser: false,
+        timestamp: new Date(),
+      };
+
+      // Remove typing indicator and add error message
+      setMessages((prev) => [...prev.slice(0, -1), errorMessage]);
+    }
   };
 
   const generateAIResponse = (userMessage: string): string => {
