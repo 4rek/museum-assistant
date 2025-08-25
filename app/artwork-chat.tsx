@@ -57,34 +57,63 @@ export default function ArtworkChatScreen() {
 
     setMessages([analysisMessage]);
 
-    // Simulate AI analysis (in real implementation, this would call your AI service)
-    setTimeout(() => {
+    try {
+      // Convert image URI to base64
+      const response = await fetch(decodeURIComponent(imageUri));
+      const blob = await response.blob();
+      
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = (reader.result as string)?.split(',')[1] || '';
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      // Call the analyze-artwork edge function
+      const analysisResponse = await fetch('http://127.0.0.1:54321/functions/v1/analyze-artwork', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0`,
+        },
+        body: JSON.stringify({
+          image: base64Data,
+          prompt: 'Analyze this artwork in Polish. Describe what you see, the artistic style, possible time period, and any notable features or techniques used. Be detailed and educational.'
+        }),
+      });
+
+      const data = await analysisResponse.json();
+
+      if (!analysisResponse.ok) {
+        throw new Error(data.error || 'Failed to analyze artwork');
+      }
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: `🎨 **Analiza dzieła sztuki**
-
-Na podstawie zdjęcia mogę powiedzieć, że to fascynujące dzieło! Oto co widzę:
-
-**Styl i technika:**
-• Wydaje się być wykonane w stylu współczesnym
-• Widoczne są charakterystyczne elementy kompozycyjne
-• Kolorystyka sugeruje przemyślane użycie palety barw
-
-**Co chciałbyś wiedzieć o tym dziele?**
-Mogę opowiedzieć o:
-• Historii i kontekście
-• Technice wykonania
-• Podobnych dziełach i artystach
-• Symbolice i znaczeniu
-
-Zadaj mi pytanie, a chętnie opowiem więcej! 😊`,
+        text: `🎨 **Analiza dzieła sztuki**\n\n${data.analysis}`,
         isUser: false,
         timestamp: new Date(),
       };
 
       setMessages((prev) => [...prev.slice(0, -1), aiResponse]);
       setIsAnalyzing(false);
-    }, 3000);
+    } catch (error) {
+      console.error('Analysis error:', error);
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "Przepraszam, wystąpił błąd podczas analizowania dzieła. Spróbuj ponownie później.",
+        isUser: false,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev.slice(0, -1), errorMessage]);
+      setIsAnalyzing(false);
+      setHasAnalyzed(false); // Allow retry
+    }
   };
 
   const sendMessage = () => {
