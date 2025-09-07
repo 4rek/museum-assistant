@@ -1,0 +1,96 @@
+appId: ue.museum.assistant
+tags:
+  - e2e
+  - rate-limiting
+  - stress-test
+---
+# Rate Limiting E2E Test
+- launchApp
+- waitForAnimationToEnd
+
+# Create initial conversation
+- runFlow: quick-photo-analysis.yaml
+
+# Wait for analysis to complete
+- assertVisible:
+    text: "🎨"
+    timeout: 30000
+
+# Send multiple rapid messages to trigger rate limit
+- repeat:
+    times: 12
+    commands:
+      - tapOn:
+          id: "message-input"
+      - inputText: "Rate limit test message ${REPEAT_INDEX}"
+      - hideKeyboard
+      - tapOn:
+          id: "send-button"
+      - waitForAnimationToEnd:
+          timeout: 3000
+
+# By message 11-12, we should hit rate limit
+# Look for rate limit error message
+- assertVisible:
+    text: "Osiągnięto limit zapytań"
+    timeout: 10000
+
+# Verify the specific rate limit message
+- assertVisible:
+    text: "10 interakcji w ciągu 5 minut"
+
+# Verify rate limit alert appears
+- runFlow:
+    when:
+      visible:
+        text: "Limit zapytań"
+    commands:
+      - assertVisible:
+          text: "OK"
+      - tapOn: "OK"
+
+# Try to send another message - should still be blocked
+- tapOn:
+    id: "message-input"
+- inputText: "This should be rate limited"
+- hideKeyboard
+- tapOn:
+    id: "send-button"
+- waitForAnimationToEnd
+
+# Should see rate limit message again
+- assertVisible:
+    text: "Osiągnięto limit zapytań"
+    timeout: 5000
+
+# Go back and test photo analysis rate limiting
+- tapOn:
+    id: "back-button"
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Scan Artwork"
+- tapOn:
+    text: "Wybierz z galerii"
+- waitForAnimationToEnd
+
+# Select photo
+- tapOn:
+    index: 0
+    id: "photo-thumbnail"
+- waitForAnimationToEnd
+
+# Try to analyze - should be rate limited
+- tapOn:
+    text: "Analizuj dzieło"
+- waitForAnimationToEnd
+
+# Should see rate limit alert for analysis
+- assertVisible:
+    text: "Rate Limit Exceeded"
+    timeout: 10000
+
+- assertVisible:
+    text: "10 interactions in 5 minutes"
+
+- tapOn: "OK"

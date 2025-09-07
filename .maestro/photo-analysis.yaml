@@ -1,0 +1,84 @@
+appId: ue.museum.assistant
+tags:
+  - e2e
+  - photo-analysis
+  - smoke
+---
+# Photo Analysis E2E Test
+- launchApp
+- waitForAnimationToEnd
+
+# Navigate to photo analysis screen
+- tapOn:
+    text: "Scan Artwork"
+- assertVisible:
+    text: "Jak chcesz dodać zdjęcie?"
+- waitForAnimationToEnd
+
+# Test camera option (mock photo capture)
+- tapOn:
+    text: "Zrób zdjęcie"
+- waitForAnimationToEnd
+
+# Grant camera permissions if requested
+- runFlow:
+    when:
+      visible:
+        text: "Allow"
+    commands:
+      - tapOn: "Allow"
+      - waitForAnimationToEnd
+
+# Wait for camera interface
+- assertVisible:
+    text: "Skanuj dzieło sztuki"
+    timeout: 5000
+
+# Take a photo (simulate capture)
+- tapOn:
+    id: "capture-button"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Accept the photo
+- tapOn:
+    text: "Użyj tego zdjęcia"
+- waitForAnimationToEnd
+
+# Should navigate to artwork chat screen
+- assertVisible:
+    text: "Analiza dzieła"
+    timeout: 5000
+
+# Trigger artwork analysis
+- tapOn:
+    text: "Analizuj dzieło"
+- waitForAnimationToEnd
+
+# Wait for analysis to complete
+- assertVisible:
+    text: "Analizuję dzieło sztuki"
+    timeout: 3000
+
+# Wait for AI response (this might take a while with real API)
+- assertVisible:
+    text: "Analiza dzieła sztuki"
+    timeout: 30000
+
+# Verify analysis results are displayed
+- assertVisible:
+    id: "ai-message-bubble"
+- assertVisible:
+    text: "🎨"
+
+# Test chat input is available
+- assertVisible:
+    id: "message-input"
+- assertVisible:
+    id: "send-button"
+
+# Go back to test navigation
+- tapOn:
+    id: "back-button"
+- assertVisible:
+    text: "Museum Assistant"

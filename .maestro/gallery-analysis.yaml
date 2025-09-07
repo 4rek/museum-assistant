@@ -1,0 +1,77 @@
+appId: ue.museum.assistant
+tags:
+  - e2e
+  - gallery-analysis
+---
+# Gallery Photo Analysis E2E Test
+- launchApp
+- waitForAnimationToEnd
+
+# Navigate to scan artwork
+- tapOn:
+    text: "Scan Artwork"
+- waitForAnimationToEnd
+
+# Choose gallery option
+- tapOn:
+    text: "Wybierz z galerii"
+- waitForAnimationToEnd
+
+# Grant photo library permissions if needed
+- runFlow:
+    when:
+      visible:
+        text: "Allow"
+    commands:
+      - tapOn: "Allow"
+      - waitForAnimationToEnd
+
+# Select a photo from gallery (select first available)
+- tapOn:
+    index: 0
+    id: "photo-thumbnail"
+- waitForAnimationToEnd
+
+# Crop/edit the photo if needed
+- runFlow:
+    when:
+      visible:
+        text: "Choose"
+    commands:
+      - tapOn: "Choose"
+      - waitForAnimationToEnd
+
+# Should navigate to artwork chat
+- assertVisible:
+    text: "Analiza dzieła"
+    timeout: 10000
+
+# Image should be displayed
+- assertVisible:
+    id: "artwork-image"
+
+# Analyze button should be available
+- assertVisible:
+    text: "Analizuj dzieło"
+
+# Trigger analysis
+- tapOn:
+    text: "Analizuj dzieło"
+
+# Wait for processing message
+- assertVisible:
+    text: "Analizuję dzieło"
+    timeout: 5000
+
+# Wait for analysis completion
+- waitForAnimationToEnd:
+    timeout: 45000
+
+# Verify analysis appeared
+- assertVisible:
+    text: "🎨"
+    timeout: 5000
+
+# Verify we can continue chatting
+- assertVisible:
+    id: "message-input"

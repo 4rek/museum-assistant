@@ -1,0 +1,20 @@
+appId: ue.museum.assistant
+tags:
+  - setup
+---
+# Setup flow - runs before each test
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Wait for app to load completely
+- assertVisible:
+    text: "Museum Assistant"
+    timeout: 10000
+
+# Check if we need to authenticate
+- runFlow: 
+    when:
+      visible:
+        text: "Sign In"
+    file: auth.yaml

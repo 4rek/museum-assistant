@@ -1,0 +1,57 @@
+appId: ue.museum.assistant
+tags:
+  - helper
+  - photo-analysis
+---
+# Quick Photo Analysis Helper Flow
+# This is a reusable flow for setting up photo analysis quickly
+
+# Navigate to scan artwork if not already there
+- runFlow:
+    when:
+      not:
+        visible:
+          text: "Jak chcesz dodać zdjęcie?"
+    commands:
+      - tapOn:
+          text: "Scan Artwork"
+      - waitForAnimationToEnd
+
+# Use gallery to select photo quickly
+- tapOn:
+    text: "Wybierz z galerii"
+- waitForAnimationToEnd
+
+# Grant permissions if needed
+- runFlow:
+    when:
+      visible:
+        text: "Allow"
+    commands:
+      - tapOn: "Allow"
+      - waitForAnimationToEnd
+
+# Select first available photo
+- tapOn:
+    index: 0
+    id: "photo-thumbnail"
+- waitForAnimationToEnd
+
+# Accept photo selection
+- runFlow:
+    when:
+      visible:
+        text: "Choose"
+    commands:
+      - tapOn: "Choose"
+      - waitForAnimationToEnd
+
+# Should be in artwork chat now
+- assertVisible:
+    text: "Analiza dzieła"
+    timeout: 10000
+
+# Trigger analysis
+- tapOn:
+    text: "Analizuj dzieło"
+- waitForAnimationToEnd

@@ -1,0 +1,7 @@
+appId: ue.museum.assistant
+tags:
+  - cleanup
+---
+# Cleanup flow - runs after each test
+- pressKey: HOME
+- waitForAnimationToEnd

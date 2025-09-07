@@ -1,0 +1,102 @@
+appId: ue.museum.assistant
+tags:
+  - e2e
+  - history
+  - conversations
+---
+# Conversation History E2E Test
+- launchApp
+- waitForAnimationToEnd
+
+# Create first conversation
+- runFlow: quick-photo-analysis.yaml
+- tapOn:
+    id: "message-input"
+- inputText: "First conversation message"
+- hideKeyboard
+- tapOn:
+    id: "send-button"
+- waitForAnimationToEnd:
+    timeout: 20000
+
+# Go back to home
+- tapOn:
+    id: "back-button"
+
+# Create second conversation
+- runFlow: quick-photo-analysis.yaml
+- tapOn:
+    id: "message-input"
+- inputText: "Second conversation message"
+- hideKeyboard
+- tapOn:
+    id: "send-button"
+- waitForAnimationToEnd:
+    timeout: 20000
+
+# Go back to home
+- tapOn:
+    id: "back-button"
+
+# Navigate to conversation history
+- tapOn:
+    text: "Historia rozmów"
+- waitForAnimationToEnd
+
+# Should see multiple conversations
+- assertVisible:
+    text: "Historia rozmów"
+
+# Should see conversation items (at least 2)
+- assertVisible:
+    text: "Artwork Analysis"
+
+# Test pull to refresh
+- scroll:
+    direction: DOWN
+    duration: 1000
+
+# Tap on first conversation
+- tapOn:
+    index: 0
+    text: "Artwork Analysis"
+- waitForAnimationToEnd
+
+# Should load conversation
+- assertVisible:
+    text: "Analiza dzieła"
+
+# Should see message history
+- assertVisible:
+    text: "🎨"
+
+# Go back to history
+- tapOn:
+    id: "back-button"
+- assertVisible:
+    text: "Historia rozmów"
+
+# Tap on second conversation
+- tapOn:
+    index: 1
+    text: "Artwork Analysis"
+- waitForAnimationToEnd
+
+# Should load different conversation
+- assertVisible:
+    text: "Analiza dzieła"
+
+# Test that conversations are separate
+- assertVisible:
+    text: "🎨"
+
+# Test conversation list scrolling
+- tapOn:
+    id: "back-button"
+- scroll:
+    direction: UP
+- scroll:
+    direction: DOWN
+
+# Test empty state (if no conversations)
+# This would be tested separately in a clean state

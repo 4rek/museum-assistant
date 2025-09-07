@@ -1,0 +1,17 @@
+# Maestro Configuration
+appId: "ue.museum.assistant"
+env:
+  MAESTRO_DRIVER_STARTUP_TIMEOUT: 30000
+  MAESTRO_COMMAND_TIMEOUT: 10000
+
+# Test data directory
+includeTags:
+  - e2e
+  - smoke
+
+# Global settings
+onFlowStart:
+  - runFlow: setup.yaml
+
+onFlowComplete:
+  - runFlow: cleanup.yaml

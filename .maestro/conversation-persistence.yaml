@@ -1,0 +1,70 @@
+appId: ue.museum.assistant
+tags:
+  - e2e
+  - persistence
+  - conversation
+---
+# Conversation Persistence E2E Test
+- launchApp
+- waitForAnimationToEnd
+
+# Create a conversation with analysis
+- runFlow: quick-photo-analysis.yaml
+
+# Send a message to establish conversation
+- tapOn:
+    id: "message-input"
+- inputText: "Test persistence message"
+- hideKeyboard
+- tapOn:
+    id: "send-button"
+- waitForAnimationToEnd:
+    timeout: 20000
+
+# Navigate back to home
+- tapOn:
+    id: "back-button"
+- assertVisible:
+    text: "Museum Assistant"
+
+# Navigate to conversation history
+- tapOn:
+    text: "Historia rozmów"
+- waitForAnimationToEnd
+
+# Should see our conversation
+- assertVisible:
+    text: "Artwork Analysis"
+    timeout: 10000
+
+# Tap on the conversation
+- tapOn:
+    text: "Artwork Analysis"
+- waitForAnimationToEnd
+
+# Should return to chat screen with history
+- assertVisible:
+    text: "Analiza dzieła"
+
+# Verify our test message is still there
+- assertVisible:
+    text: "Test persistence message"
+
+# Verify analysis is still there
+- assertVisible:
+    text: "🎨"
+
+# Send another message to test continued conversation
+- tapOn:
+    id: "message-input"
+- inputText: "Another message after restoration"
+- hideKeyboard
+- tapOn:
+    id: "send-button"
+- waitForAnimationToEnd
+
+# Verify both messages exist
+- assertVisible:
+    text: "Test persistence message"
+- assertVisible:
+    text: "Another message after restoration"

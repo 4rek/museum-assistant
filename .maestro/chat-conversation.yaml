@@ -1,0 +1,92 @@
+appId: ue.museum.assistant
+tags:
+  - e2e
+  - chat
+  - conversation
+---
+# Chat Conversation E2E Test
+- launchApp
+- waitForAnimationToEnd
+
+# First, analyze an artwork to create a conversation
+- runFlow: quick-photo-analysis.yaml
+
+# Now we should be in the chat screen
+- assertVisible:
+    text: "Analiza dzieła"
+
+# Wait for initial analysis to complete
+- assertVisible:
+    text: "🎨"
+    timeout: 30000
+
+# Send a follow-up question
+- tapOn:
+    id: "message-input"
+- inputText: "Co możesz powiedzieć o kolorach w tym dziele?"
+- hideKeyboard
+
+- tapOn:
+    id: "send-button" 
+- waitForAnimationToEnd
+
+# Verify message was sent
+- assertVisible:
+    text: "Co możesz powiedzieć o kolorach"
+
+# Wait for AI response
+- assertVisible:
+    text: "..."
+    timeout: 5000
+
+# Wait for actual response
+- waitForAnimationToEnd:
+    timeout: 30000
+
+# Send another question to test conversation context
+- tapOn:
+    id: "message-input"
+- inputText: "A jakie techniki artystyczne zostały użyte?"
+- hideKeyboard
+
+- tapOn:
+    id: "send-button"
+- waitForAnimationToEnd
+
+# Verify second message sent
+- assertVisible:
+    text: "techniki artystyczne"
+
+# Wait for response
+- waitForAnimationToEnd:
+    timeout: 30000
+
+# Send a third message to test context retention
+- tapOn:
+    id: "message-input"
+- inputText: "Czy możesz porównać to z podobnymi dziełami?"
+- hideKeyboard
+
+- tapOn:
+    id: "send-button"
+- waitForAnimationToEnd
+
+# Verify conversation has multiple exchanges
+- assertVisible:
+    text: "Co możesz powiedzieć"
+- assertVisible:
+    text: "techniki artystyczne"  
+- assertVisible:
+    text: "porównać to z podobnymi"
+
+# Test that we can scroll through conversation
+- scroll:
+    direction: UP
+- scroll:
+    direction: DOWN
+
+# Verify chat input still works
+- assertVisible:
+    id: "message-input"
+- assertVisible:
+    id: "send-button"

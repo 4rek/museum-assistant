@@ -1,0 +1,26 @@
+appId: ue.museum.assistant
+tags:
+  - auth
+  - helper
+---
+# Authentication helper flow
+- tapOn: "Sign In"
+- waitForAnimationToEnd
+
+# Fill in test credentials
+- tapOn: "Email"
+- inputText: "test@example.com"
+- hideKeyboard
+
+- tapOn: "Password" 
+- inputText: "testpassword123"
+- hideKeyboard
+
+- tapOn: "Sign In"
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Wait for successful authentication
+- assertVisible:
+    text: "Welcome"
+    timeout: 15000
