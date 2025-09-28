@@ -1,32 +1,47 @@
-import React, { useState } from 'react'
-import { View, Text, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native'
-import * as ImagePicker from 'expo-image-picker'
-import { StyleSheet } from 'react-native'
-import { RateLimitError } from '@/lib/conversationService'
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Image,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
+import * as ImagePicker from "expo-image-picker";
+import { StyleSheet } from "react-native";
+import { RateLimitError } from "@/lib/conversationService";
 
 interface PhotoPickerProps {
-  onAnalysisComplete: (analysis: string) => void
-  onImageSelected?: (imageUri: string) => void
+  onAnalysisComplete: (analysis: string) => void;
+  onImageSelected?: (imageUri: string) => void;
 }
 
-export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: PhotoPickerProps) {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+export default function PhotoPicker({
+  onAnalysisComplete,
+  onImageSelected,
+}: PhotoPickerProps) {
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const requestPermissions = async () => {
-    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync()
-    const { status: galleryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    
-    if (cameraStatus !== 'granted' || galleryStatus !== 'granted') {
-      Alert.alert('Permission Required', 'Camera and photo library permissions are required to select images.')
-      return false
+    const { status: cameraStatus } =
+      await ImagePicker.requestCameraPermissionsAsync();
+    const { status: galleryStatus } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (cameraStatus !== "granted" || galleryStatus !== "granted") {
+      Alert.alert(
+        "Permission Required",
+        "Camera and photo library permissions are required to select images.",
+      );
+      return false;
     }
-    return true
-  }
+    return true;
+  };
 
   const takePhoto = async () => {
-    const hasPermission = await requestPermissions()
-    if (!hasPermission) return
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
 
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -34,18 +49,18 @@ export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: Pho
       aspect: [4, 3],
       quality: 0.8,
       base64: true,
-    })
+    });
 
     if (!result.canceled && result.assets[0]) {
-      const imageUri = result.assets[0].uri
-      setSelectedImage(imageUri)
-      onImageSelected?.(imageUri)
+      const imageUri = result.assets[0].uri;
+      setSelectedImage(imageUri);
+      onImageSelected?.(imageUri);
     }
-  }
+  };
 
   const pickImage = async () => {
-    const hasPermission = await requestPermissions()
-    if (!hasPermission) return
+    const hasPermission = await requestPermissions();
+    if (!hasPermission) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -53,22 +68,22 @@ export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: Pho
       aspect: [4, 3],
       quality: 0.8,
       base64: true,
-    })
+    });
 
     if (!result.canceled && result.assets[0]) {
-      const imageUri = result.assets[0].uri
-      setSelectedImage(imageUri)
-      onImageSelected?.(imageUri)
+      const imageUri = result.assets[0].uri;
+      setSelectedImage(imageUri);
+      onImageSelected?.(imageUri);
     }
-  }
+  };
 
   const analyzeImage = async () => {
     if (!selectedImage) {
-      Alert.alert('No Image', 'Please select an image first.')
-      return
+      Alert.alert("No Image", "Please select an image first.");
+      return;
     }
 
-    setIsAnalyzing(true)
+    setIsAnalyzing(true);
 
     try {
       // Get the base64 data from the selected image
@@ -77,64 +92,73 @@ export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: Pho
         allowsEditing: false,
         quality: 0.8,
         base64: true,
-      })
+      });
 
-      let base64Data = ''
-      
+      let base64Data = "";
+
       if (result.assets?.[0]?.base64) {
-        base64Data = result.assets[0].base64
+        base64Data = result.assets[0].base64;
       } else {
         // If we can't get base64 from the picker, we'll need to convert the URI
-        const response = await fetch(selectedImage)
-        const blob = await response.blob()
-        const reader = new FileReader()
-        
+        const response = await fetch(selectedImage);
+        const blob = await response.blob();
+        const reader = new FileReader();
+
         base64Data = await new Promise((resolve, reject) => {
           reader.onloadend = () => {
-            const base64 = (reader.result as string)?.split(',')[1] || ''
-            resolve(base64)
-          }
-          reader.onerror = reject
-          reader.readAsDataURL(blob)
-        })
+            const base64 = (reader.result as string)?.split(",")[1] || "";
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
       }
 
-      const analysisResponse = await fetch('http://127.0.0.1:54321/functions/v1/analyze-artwork', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key'}`,
+      const analysisResponse = await fetch(
+        "http://127.0.0.1:54321/functions/v1/analyze-artwork",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "your-anon-key"}`,
+          },
+          body: JSON.stringify({
+            image: base64Data,
+            prompt:
+              "Analyze this artwork. Describe what you see, the artistic style, possible time period, and any notable features or techniques used.",
+          }),
         },
-        body: JSON.stringify({
-          image: base64Data,
-          prompt: 'Analyze this artwork. Describe what you see, the artistic style, possible time period, and any notable features or techniques used.'
-        }),
-      })
+      );
 
-      const data = await analysisResponse.json()
+      const data = await analysisResponse.json();
 
       if (!analysisResponse.ok) {
-        throw new Error(data.error || 'Failed to analyze image')
+        throw new Error(data.error || "Failed to analyze image");
       }
 
-      onAnalysisComplete(data.analysis)
+      onAnalysisComplete(data.analysis);
     } catch (error) {
-      console.error('Analysis error:', error)
-      
+      console.error("Analysis error:", error);
+
       if (error instanceof RateLimitError) {
-        const waitMinutes = Math.ceil(error.retryAfter / 60)
+        const waitMinutes = Math.ceil(error.retryAfter / 60);
         Alert.alert(
-          'Rate Limit Exceeded',
+          "Rate Limit Exceeded",
           `You've reached the limit of 10 interactions in 5 minutes. Please wait ${waitMinutes} minutes before trying again.`,
-          [{ text: 'OK' }]
-        )
+          [{ text: "OK" }],
+        );
       } else {
-        Alert.alert('Analysis Error', error instanceof Error ? error.message : 'Failed to analyze the artwork')
+        Alert.alert(
+          "Analysis Error",
+          error instanceof Error
+            ? error.message
+            : "Failed to analyze the artwork",
+        );
       }
     } finally {
-      setIsAnalyzing(false)
+      setIsAnalyzing(false);
     }
-  }
+  };
 
   return (
     <View style={styles.container}>
@@ -142,7 +166,7 @@ export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: Pho
         <TouchableOpacity style={styles.button} onPress={takePhoto}>
           <Text style={styles.buttonText}>Take Photo</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.button} onPress={pickImage}>
           <Text style={styles.buttonText}>Choose from Gallery</Text>
         </TouchableOpacity>
@@ -151,9 +175,9 @@ export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: Pho
       {selectedImage && (
         <View style={styles.imageContainer}>
           <Image source={{ uri: selectedImage }} style={styles.image} />
-          
-          <TouchableOpacity 
-            style={[styles.analyzeButton, isAnalyzing && styles.disabledButton]} 
+
+          <TouchableOpacity
+            style={[styles.analyzeButton, isAnalyzing && styles.disabledButton]}
             onPress={analyzeImage}
             disabled={isAnalyzing}
           >
@@ -166,7 +190,7 @@ export default function PhotoPicker({ onAnalysisComplete, onImageSelected }: Pho
         </View>
       )}
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -175,25 +199,25 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     marginBottom: 20,
   },
   button: {
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
     minWidth: 120,
-    alignItems: 'center',
+    alignItems: "center",
   },
   buttonText: {
-    color: 'white',
+    color: "white",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   imageContainer: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   image: {
     width: 300,
@@ -202,19 +226,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   analyzeButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: "#34C759",
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 10,
     minWidth: 150,
-    alignItems: 'center',
+    alignItems: "center",
   },
   disabledButton: {
-    backgroundColor: '#999',
+    backgroundColor: "#999",
   },
   analyzeButtonText: {
-    color: 'white',
+    color: "white",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
-})
+});

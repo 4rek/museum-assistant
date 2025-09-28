@@ -16,7 +16,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import HeaderContainer from "@/components/HeaderContainer";
-import { conversationService, type Message as ConversationMessage, RateLimitError } from "@/lib/conversationService";
+import {
+  conversationService,
+  type Message as ConversationMessage,
+  RateLimitError,
+} from "@/lib/conversationService";
 
 const { width, height } = Dimensions.get("window");
 
@@ -28,25 +32,28 @@ interface Message {
 }
 
 export default function ArtworkChatScreen() {
-  const { imageUri, conversationId } = useLocalSearchParams<{ 
-    imageUri?: string; 
-    conversationId?: string; 
+  const { imageUri, conversationId, hasMetadata } = useLocalSearchParams<{
+    imageUri?: string;
+    conversationId?: string;
+    hasMetadata?: string;
   }>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(
-    conversationId || null
-  );
+  const [currentConversationId, setCurrentConversationId] = useState<
+    string | null
+  >(conversationId || null);
+  const [streamingContent, setStreamingContent] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Remove auto-analysis on mount
 
   useEffect(() => {
-    // Auto-scroll to bottom when new messages are added
+    // Auto-scroll to bottom when new messages are added or content is streaming
     scrollViewRef.current?.scrollToEnd({ animated: true });
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   useEffect(() => {
     // Load existing conversation if conversationId is provided
@@ -57,25 +64,34 @@ export default function ArtworkChatScreen() {
 
   const loadConversation = async (convId: string) => {
     try {
-      const { conversation, messages: convMessages } = await conversationService.getConversation(convId);
-      
-      const formattedMessages: Message[] = convMessages.map(msg => ({
+      const { conversation, messages: convMessages } =
+        await conversationService.getConversation(convId);
+
+      const formattedMessages: Message[] = convMessages.map((msg) => ({
         id: msg.id,
         text: msg.content,
-        isUser: msg.role === 'user',
-        timestamp: new Date(msg.created_at)
+        isUser: msg.role === "user",
+        timestamp: new Date(msg.created_at),
       }));
 
       setMessages(formattedMessages);
       setHasAnalyzed(true); // Assume conversation already has analysis
     } catch (error) {
-      console.error('Error loading conversation:', error);
-      Alert.alert('Error', 'Failed to load conversation');
+      console.error("Error loading conversation:", error);
+      Alert.alert("Error", "Failed to load conversation");
     }
   };
 
   const analyzeArtwork = async () => {
-    if (hasAnalyzed || !imageUri) return;
+    console.log("🎨 Starting artwork analysis", { hasAnalyzed, imageUri });
+
+    if (hasAnalyzed || !imageUri) {
+      console.log("❌ Analysis skipped", {
+        hasAnalyzed,
+        hasImageUri: !!imageUri,
+      });
+      return;
+    }
 
     setIsAnalyzing(true);
     setHasAnalyzed(true);
@@ -89,59 +105,124 @@ export default function ArtworkChatScreen() {
     };
 
     setMessages([analysisMessage]);
+    console.log("📝 Initial analysis message added");
 
     try {
+      console.log("🖼️ Converting image to base64...");
+
       // Convert image URI to base64
       const response = await fetch(decodeURIComponent(imageUri));
+      console.log("📥 Image fetch response:", response.status);
+
       const blob = await response.blob();
-      
+      console.log("🗂️ Blob created:", { size: blob.size, type: blob.type });
+
       const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-          const base64 = (reader.result as string)?.split(',')[1] || '';
+          const base64 = (reader.result as string)?.split(",")[1] || "";
+          console.log("✅ Base64 conversion complete:", {
+            length: base64.length,
+          });
           resolve(base64);
         };
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       });
 
-      // Use the conversation service to analyze and create conversation
-      const { analysis, conversationId: newConversationId } = await conversationService.analyzeArtwork(
-        base64Data,
-        'Analyze this artwork in Polish. Describe what you see, the artistic style, possible time period, and any notable features or techniques used. Be detailed and educational.',
-        true, // Create conversation
-        decodeURIComponent(imageUri)
-      );
+      // Get metadata if available
+      const imagePickerResult =
+        hasMetadata === "true"
+          ? (global as any).lastImagePickerResult
+          : undefined;
+
+      console.log("🌍 Metadata check:", {
+        hasMetadata,
+        hasImagePickerResult: !!imagePickerResult,
+      });
+
+      // Enable streaming for better user experience
+      console.log("🌊 Enabling streaming...");
+      setIsStreaming(true);
+      setStreamingContent("");
+
+      let streamChunkCount = 0;
+
+      // Use the conversation service to analyze and create conversation with streaming
+      console.log("🚀 Calling conversationService.analyzeArtwork...");
+      const { analysis, conversationId: newConversationId } =
+        await conversationService.analyzeArtwork(
+          base64Data,
+          undefined, // Let service generate prompt
+          true, // Create conversation
+          decodeURIComponent(imageUri),
+          imagePickerResult,
+          false, // Disable streaming for now due to React Native limitations
+          (chunk: string) => {
+            console.log(
+              `✨ Stream chunk ${++streamChunkCount}:`,
+              chunk.substring(0, 50) + "...",
+            );
+            // Update streaming content as it comes in
+            setStreamingContent((prev) => prev + chunk);
+          },
+        );
+
+      console.log("🏁 Analysis completed", {
+        hasAnalysis: !!analysis,
+        analysisLength: typeof analysis === "string" ? analysis.length : 0,
+        newConversationId,
+      });
+
+      setIsStreaming(false);
 
       if (newConversationId) {
         setCurrentConversationId(newConversationId);
       }
 
+      // Analysis is now in markdown format from the AI
+      const analysisText =
+        typeof analysis === "string" ? analysis : analysis.toString();
+
+      console.log("📄 Final analysis text:", {
+        length: analysisText.length,
+        preview: analysisText.substring(0, 100) + "...",
+      });
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: `🎨 **Analiza dzieła sztuki**\n\n${analysis}`,
+        text: analysisText,
         isUser: false,
         timestamp: new Date(),
       };
 
+      console.log("💬 Created AI response message:", {
+        id: aiResponse.id,
+        textLength: aiResponse.text.length,
+      });
+
+      console.log("📝 Adding AI response to messages");
       setMessages((prev) => [...prev.slice(0, -1), aiResponse]);
       setIsAnalyzing(false);
+      console.log("✅ Analysis process completed successfully");
     } catch (error) {
-      console.error('Analysis error:', error);
-      
-      let errorText = "Przepraszam, wystąpił błąd podczas analizowania dzieła. Spróbuj ponownie później.";
-      
+      console.error("❌ Analysis error:", error);
+      console.error("❌ Error stack:", error.stack);
+
+      let errorText =
+        "Przepraszam, wystąpił błąd podczas analizowania dzieła. Spróbuj ponownie później.";
+
       if (error instanceof RateLimitError) {
         const waitMinutes = Math.ceil(error.retryAfter / 60);
         errorText = `Osiągnięto limit zapytań. Spróbuj ponownie za ${waitMinutes} minut. Limit to 10 interakcji w ciągu 5 minut.`;
-        
+
         Alert.alert(
-          'Limit zapytań',
+          "Limit zapytań",
           `Osiągnięto limit 10 interakcji w ciągu 5 minut. Spróbuj ponownie za ${waitMinutes} minut.`,
-          [{ text: 'OK' }]
+          [{ text: "OK" }],
         );
       }
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: errorText,
@@ -171,8 +252,8 @@ export default function ArtworkChatScreen() {
 
     // Add typing indicator
     const typingMessage: Message = {
-      id: 'typing',
-      text: '...',
+      id: "typing",
+      text: "...",
       isUser: false,
       timestamp: new Date(),
     };
@@ -185,15 +266,15 @@ export default function ArtworkChatScreen() {
       // Create new conversation if none exists
       if (!conversationIdToUse) {
         conversationIdToUse = await conversationService.createConversation(
-          'Artwork Chat',
-          imageUri ? decodeURIComponent(imageUri) : undefined
+          "Artwork Chat",
+          imageUri ? decodeURIComponent(imageUri) : undefined,
         );
         setCurrentConversationId(conversationIdToUse);
       }
 
       const response = await conversationService.sendMessage(
         messageText,
-        conversationIdToUse
+        conversationIdToUse,
       );
 
       const aiResponse: Message = {
@@ -206,21 +287,22 @@ export default function ArtworkChatScreen() {
       // Remove typing indicator and add real response
       setMessages((prev) => [...prev.slice(0, -1), aiResponse]);
     } catch (error) {
-      console.error('Send message error:', error);
-      
-      let errorText = "Przepraszam, wystąpił błąd podczas wysyłania wiadomości. Spróbuj ponownie.";
-      
+      console.error("Send message error:", error);
+
+      let errorText =
+        "Przepraszam, wystąpił błąd podczas wysyłania wiadomości. Spróbuj ponownie.";
+
       if (error instanceof RateLimitError) {
         const waitMinutes = Math.ceil(error.retryAfter / 60);
         errorText = `Osiągnięto limit zapytań. Spróbuj ponownie za ${waitMinutes} minut. Limit to 10 interakcji w ciągu 5 minut.`;
-        
+
         Alert.alert(
-          'Limit zapytań',
+          "Limit zapytań",
           `Osiągnięto limit 10 interakcji w ciągu 5 minut. Spróbuj ponownie za ${waitMinutes} minut.`,
-          [{ text: 'OK' }]
+          [{ text: "OK" }],
         );
       }
-      
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: errorText,
@@ -355,7 +437,7 @@ export default function ArtworkChatScreen() {
             </View>
           ))}
 
-          {isAnalyzing && (
+          {isAnalyzing && !isStreaming && (
             <View style={[styles.messageContainer, styles.aiMessage]}>
               <View style={styles.aiAvatar}>
                 <Ionicons name="sparkles" size={16} color="#667eea" />
@@ -364,6 +446,26 @@ export default function ArtworkChatScreen() {
                 <View style={styles.typingDot} />
                 <View style={styles.typingDot} />
                 <View style={styles.typingDot} />
+              </View>
+            </View>
+          )}
+
+          {isStreaming && streamingContent && (
+            <View style={[styles.messageContainer, styles.aiMessage]}>
+              <View style={styles.aiAvatar}>
+                <Ionicons name="sparkles" size={16} color="#667eea" />
+              </View>
+              <View
+                style={[
+                  styles.messageBubble,
+                  styles.aiBubble,
+                  styles.streamingBubble,
+                ]}
+              >
+                <Text style={[styles.messageText, styles.aiText]}>
+                  {streamingContent}
+                  <Text style={styles.cursor}>|</Text>
+                </Text>
               </View>
             </View>
           )}
@@ -458,7 +560,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   retakeText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#667eea",
     fontWeight: "600",
   },
@@ -472,7 +574,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   analyzeText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#FFFFFF",
     fontWeight: "600",
   },
@@ -548,6 +650,15 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#94A3B8",
+  },
+  streamingBubble: {
+    borderColor: "#667eea",
+    borderWidth: 1,
+  },
+  cursor: {
+    color: "#667eea",
+    fontWeight: "bold",
+    fontSize: 18,
   },
   inputSafeArea: {
     backgroundColor: "#FFFFFF",

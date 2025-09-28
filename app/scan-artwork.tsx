@@ -22,6 +22,7 @@ export default function ScanArtworkScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [showCamera, setShowCamera] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
+  const [capturedPhotoResult, setCapturedPhotoResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
@@ -74,11 +75,16 @@ export default function ScanArtworkScreen() {
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
+      exif: true, // Enable EXIF data extraction
     });
 
     if (!pickerResult.canceled && pickerResult.assets[0]) {
       const imageUri = pickerResult.assets[0].uri;
-      router.push(`/artwork-chat?imageUri=${encodeURIComponent(imageUri)}`);
+      // Store the picker result globally so it can be accessed by artwork-chat
+      (global as any).lastImagePickerResult = pickerResult;
+      router.push(
+        `/artwork-chat?imageUri=${encodeURIComponent(imageUri)}&hasMetadata=true`,
+      );
     }
   };
 
@@ -88,10 +94,12 @@ export default function ScanArtworkScreen() {
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.8,
           base64: false,
+          exif: true,
         });
 
         if (photo) {
           setCapturedPhoto(photo.uri);
+          setCapturedPhotoResult(photo);
           setShowPreview(true);
         }
       } catch (error) {
@@ -105,15 +113,29 @@ export default function ScanArtworkScreen() {
   };
 
   const acceptPhoto = () => {
-    if (capturedPhoto) {
+    if (capturedPhoto && capturedPhotoResult) {
+      // Convert camera result to ImagePickerResult format
+      const mockPickerResult = {
+        canceled: false,
+        assets: [
+          {
+            uri: capturedPhotoResult.uri,
+            width: capturedPhotoResult.width,
+            height: capturedPhotoResult.height,
+            exif: capturedPhotoResult.exif,
+          },
+        ],
+      };
+      (global as any).lastImagePickerResult = mockPickerResult;
       router.push(
-        `/artwork-chat?imageUri=${encodeURIComponent(capturedPhoto)}`,
+        `/artwork-chat?imageUri=${encodeURIComponent(capturedPhoto)}&hasMetadata=true`,
       );
     }
   };
 
   const retakePhoto = () => {
     setCapturedPhoto(null);
+    setCapturedPhotoResult(null);
     setShowPreview(false);
   };
 
@@ -144,6 +166,7 @@ export default function ScanArtworkScreen() {
                 onPress={() => {
                   setShowPreview(false);
                   setCapturedPhoto(null);
+                  setCapturedPhotoResult(null);
                   setShowCamera(false);
                 }}
               >
@@ -346,6 +369,7 @@ const styles = StyleSheet.create({
   optionButton: {
     borderRadius: 20,
     padding: 24,
+    marginHorizontal: 24,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: {

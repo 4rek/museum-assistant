@@ -17,10 +17,8 @@ tags:
 - hideKeyboard
 
 - tapOn: "Sign In"
-- waitForAnimationToEnd:
-    timeout: 10000
+- waitForAnimationToEnd
 
 # Wait for successful authentication
 - assertVisible:
     text: "Welcome"
-    timeout: 15000

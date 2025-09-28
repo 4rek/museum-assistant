@@ -3,7 +3,7 @@ import { AppState } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { createClient, processLock } from "@supabase/supabase-js";
 
-const supabaseUrl = "https://czbvosthargmigcymosy.supabase.co";
+export const supabaseUrl = "https://czbvosthargmigcymosy.supabase.co";
 const supabaseAnonKey =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6YnZvc3RoYXJnbWlnY3ltb3N5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3MjA4NDQsImV4cCI6MjA3MTI5Njg0NH0.jYjHJPhSDwEuTG1mRrBQPq0WpDbzv1Kgtc4mo4L9xuE";
 
