@@ -11,7 +11,9 @@ import {
   Platform,
   Dimensions,
   Alert,
+  Keyboard,
 } from "react-native";
+import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -44,16 +46,40 @@ export default function ArtworkChatScreen() {
   const [currentConversationId, setCurrentConversationId] = useState<
     string | null
   >(conversationId || null);
-  const [streamingContent, setStreamingContent] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [isImageVisible, setIsImageVisible] = useState(true);
+  const [locationData, setLocationData] = useState<{
+    latitude: number;
+    longitude: number;
+    address?: string;
+    name?: string;
+  } | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Remove auto-analysis on mount
 
   useEffect(() => {
-    // Auto-scroll to bottom when new messages are added or content is streaming
+    // Auto-scroll to bottom when new messages are added
     scrollViewRef.current?.scrollToEnd({ animated: true });
-  }, [messages, streamingContent]);
+  }, [messages]);
+
+  useEffect(() => {
+    // Handle keyboard events
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      // Scroll to bottom when keyboard appears
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      // Optional: handle keyboard hide if needed
+    });
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
 
   useEffect(() => {
     // Load existing conversation if conversationId is provided
@@ -61,6 +87,41 @@ export default function ArtworkChatScreen() {
       loadConversation(conversationId);
     }
   }, [conversationId]);
+
+  useEffect(() => {
+    // Get current location when component mounts
+    getCurrentLocation();
+  }, []);
+
+  const getCurrentLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Location permission denied');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const address = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      const addressString = address[0] ?
+        `${address[0].street || ''} ${address[0].streetNumber || ''}, ${address[0].city || ''}, ${address[0].country || ''}`.trim() :
+        'Nieznana lokalizacja';
+
+      setLocationData({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        address: addressString,
+        name: address[0]?.name || address[0]?.street || 'Aktualna lokalizacja'
+      });
+    } catch (error) {
+      console.error('Error getting location:', error);
+    }
+  };
+
 
   const loadConversation = async (convId: string) => {
     try {
@@ -141,31 +202,13 @@ export default function ArtworkChatScreen() {
         hasImagePickerResult: !!imagePickerResult,
       });
 
-      // Enable streaming for better user experience
-      console.log("🌊 Enabling streaming...");
-      setIsStreaming(true);
-      setStreamingContent("");
-
-      let streamChunkCount = 0;
-
-      // Use the conversation service to analyze and create conversation with streaming
       console.log("🚀 Calling conversationService.analyzeArtwork...");
       const { analysis, conversationId: newConversationId } =
         await conversationService.analyzeArtwork(
           base64Data,
-          undefined, // Let service generate prompt
           true, // Create conversation
-          decodeURIComponent(imageUri),
-          imagePickerResult,
-          false, // Disable streaming for now due to React Native limitations
-          (chunk: string) => {
-            console.log(
-              `✨ Stream chunk ${++streamChunkCount}:`,
-              chunk.substring(0, 50) + "...",
-            );
-            // Update streaming content as it comes in
-            setStreamingContent((prev) => prev + chunk);
-          },
+          decodeURIComponent(imageUri), // Image URL
+          locationData, // Location data
         );
 
       console.log("🏁 Analysis completed", {
@@ -174,7 +217,6 @@ export default function ArtworkChatScreen() {
         newConversationId,
       });
 
-      setIsStreaming(false);
 
       if (newConversationId) {
         setCurrentConversationId(newConversationId);
@@ -196,12 +238,6 @@ export default function ArtworkChatScreen() {
         timestamp: new Date(),
       };
 
-      console.log("💬 Created AI response message:", {
-        id: aiResponse.id,
-        textLength: aiResponse.text.length,
-      });
-
-      console.log("📝 Adding AI response to messages");
       setMessages((prev) => [...prev.slice(0, -1), aiResponse]);
       setIsAnalyzing(false);
       console.log("✅ Analysis process completed successfully");
@@ -263,19 +299,18 @@ export default function ArtworkChatScreen() {
     try {
       let conversationIdToUse = currentConversationId;
 
-      // Create new conversation if none exists
-      if (!conversationIdToUse) {
-        conversationIdToUse = await conversationService.createConversation(
-          "Artwork Chat",
-          imageUri ? decodeURIComponent(imageUri) : undefined,
-        );
-        setCurrentConversationId(conversationIdToUse);
-      }
-
       const response = await conversationService.sendMessage(
         messageText,
         conversationIdToUse,
+        !conversationIdToUse, // createNew if no conversation exists
+        conversationIdToUse ? undefined : "Rozmowa o dziele sztuki", // title only for new conversations
+        conversationIdToUse ? undefined : (imageUri ? decodeURIComponent(imageUri) : undefined), // artworkImageUrl only for new conversations
       );
+
+      // Update conversation ID if this was a new conversation
+      if (!conversationIdToUse && response.conversationId) {
+        setCurrentConversationId(response.conversationId);
+      }
 
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
@@ -341,15 +376,10 @@ export default function ArtworkChatScreen() {
     );
   };
 
-  const saveToCollection = () => {
-    Alert.alert("Zapisano!", "Dzieło zostało dodane do Twojej kolekcji.", [
-      { text: "OK" },
-    ]);
-  };
 
   if (!imageUri) {
     return (
-      <HeaderContainer title="Analiza dzieła">
+      <HeaderContainer title="Analiza dzieła" showHomeButton={true}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Brak zdjęcia do analizy</Text>
           <TouchableOpacity
@@ -363,48 +393,62 @@ export default function ArtworkChatScreen() {
     );
   }
 
-  const rightButton = (
-    <TouchableOpacity style={styles.saveButton} onPress={saveToCollection}>
-      <Ionicons name="bookmark" size={24} color="#FFFFFF" />
-    </TouchableOpacity>
-  );
 
   return (
-    <HeaderContainer title="Analiza dzieła" rightButton={rightButton}>
-      {/* Artwork Image */}
-      <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: decodeURIComponent(imageUri) }}
-          style={styles.artworkImage}
-        />
-        <View style={styles.imageActions}>
-          <TouchableOpacity style={styles.retakeButton} onPress={retakePhoto}>
-            <Ionicons name="camera" size={14} color="#667eea" />
-            <Text style={styles.retakeText}>Zrób ponownie</Text>
-          </TouchableOpacity>
-          {!hasAnalyzed && (
-            <TouchableOpacity
-              style={styles.analyzeButton}
-              onPress={analyzeArtwork}
-            >
-              <Ionicons name="sparkles" size={14} color="#FFFFFF" />
-              <Text style={styles.analyzeText}>Analizuj dzieło</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+    <HeaderContainer title="Analiza dzieła" onBackPress={() => router.push("/collection")} showHomeButton={true}>
+      {/* Artwork Image Panel */}
+      <View style={styles.imagePanel}>
+        <TouchableOpacity
+          style={styles.imagePanelHeader}
+          onPress={() => setIsImageVisible(!isImageVisible)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.imagePanelHeaderText}>Analizowane dzieło</Text>
+          <Ionicons
+            name={isImageVisible ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#667eea"
+          />
+        </TouchableOpacity>
+
+        {isImageVisible && (
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: decodeURIComponent(imageUri) }}
+              style={styles.artworkImage}
+            />
+            <View style={styles.imageActions}>
+              <TouchableOpacity style={styles.retakeButton} onPress={retakePhoto}>
+                <Ionicons name="camera" size={14} color="#667eea" />
+                <Text style={styles.retakeText}>Zrób ponownie</Text>
+              </TouchableOpacity>
+              {!hasAnalyzed && (
+                <TouchableOpacity
+                  style={styles.analyzeButton}
+                  onPress={analyzeArtwork}
+                >
+                  <Ionicons name="sparkles" size={14} color="#FFFFFF" />
+                  <Text style={styles.analyzeText}>Analizuj dzieło</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Chat Interface */}
       <KeyboardAvoidingView
         style={styles.chatContainer}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
       >
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesContainer}
           contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           {messages.map((message) => (
             <View
@@ -437,7 +481,7 @@ export default function ArtworkChatScreen() {
             </View>
           ))}
 
-          {isAnalyzing && !isStreaming && (
+          {isAnalyzing && (
             <View style={[styles.messageContainer, styles.aiMessage]}>
               <View style={styles.aiAvatar}>
                 <Ionicons name="sparkles" size={16} color="#667eea" />
@@ -446,26 +490,6 @@ export default function ArtworkChatScreen() {
                 <View style={styles.typingDot} />
                 <View style={styles.typingDot} />
                 <View style={styles.typingDot} />
-              </View>
-            </View>
-          )}
-
-          {isStreaming && streamingContent && (
-            <View style={[styles.messageContainer, styles.aiMessage]}>
-              <View style={styles.aiAvatar}>
-                <Ionicons name="sparkles" size={16} color="#667eea" />
-              </View>
-              <View
-                style={[
-                  styles.messageBubble,
-                  styles.aiBubble,
-                  styles.streamingBubble,
-                ]}
-              >
-                <Text style={[styles.messageText, styles.aiText]}>
-                  {streamingContent}
-                  <Text style={styles.cursor}>|</Text>
-                </Text>
               </View>
             </View>
           )}
@@ -482,6 +506,12 @@ export default function ArtworkChatScreen() {
               maxLength={500}
               returnKeyType="send"
               onSubmitEditing={sendMessage}
+              onFocus={() => {
+                // Scroll to bottom when input is focused
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollToEnd({ animated: true });
+                }, 300);
+              }}
             />
             <TouchableOpacity
               style={[
@@ -526,19 +556,34 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-  saveButton: {
-    padding: 8,
-  },
   content: {
     flex: 1,
+  },
+  imagePanel: {
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  imagePanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: "#F8FAFC",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  imagePanelHeaderText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#475569",
   },
   imageContainer: {
     alignItems: "center",
     paddingVertical: 16,
     paddingHorizontal: 20,
     backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
   },
   artworkImage: {
     width: width * 0.5,
@@ -650,15 +695,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#94A3B8",
-  },
-  streamingBubble: {
-    borderColor: "#667eea",
-    borderWidth: 1,
-  },
-  cursor: {
-    color: "#667eea",
-    fontWeight: "bold",
-    fontSize: 18,
   },
   inputSafeArea: {
     backgroundColor: "#FFFFFF",

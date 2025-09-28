@@ -247,7 +247,7 @@ export default function ScanArtworkScreen() {
   }
 
   return (
-    <HeaderContainer title="Skanuj dzieło sztuki">
+    <HeaderContainer title="Skanuj dzieło sztuki" showHomeButton={true}>
       <View style={styles.instructionContainer}>
         <View style={styles.iconContainer}>
           <Ionicons name="camera" size={64} color="#667eea" />

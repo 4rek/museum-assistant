@@ -23,6 +23,10 @@ export default function DashboardHeader({
     return email.slice(0, 2).toUpperCase();
   };
 
+  const capitalize = (val: string) => {
+    return val.charAt(0).toUpperCase() + String(val).slice(1);
+  };
+
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -35,7 +39,7 @@ export default function DashboardHeader({
               <View>
                 <Text style={styles.greeting}>Witaj ponownie!</Text>
                 <Text style={styles.userName}>
-                  {session.user.email?.split("@")[0]}
+                  {capitalize(session.user.email?.split("@")[0])}
                 </Text>
               </View>
 

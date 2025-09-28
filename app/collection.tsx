@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,47 +8,130 @@ import {
   ScrollView,
   Image,
   Dimensions,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import HeaderContainer from "@/components/HeaderContainer";
+import { conversationService, type Conversation } from "@/lib/conversationService";
 
 const { width } = Dimensions.get("window");
 const cardWidth = (width - 48) / 2;
 
-// Sample collection data
-const collectionItems = [
-  {
-    id: 1,
-    title: "Mona Lisa",
-    artist: "Leonardo da Vinci",
-    museum: "Musée du Louvre",
-    dateAdded: "2 dni temu",
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ec/Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg/300px-Mona_Lisa%2C_by_Leonardo_da_Vinci%2C_from_C2RMF_retouched.jpg",
-  },
-  {
-    id: 2,
-    title: "Gwiaździsta noc",
-    artist: "Vincent van Gogh",
-    museum: "Museum of Modern Art",
-    dateAdded: "5 dni temu",
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg/300px-Van_Gogh_-_Starry_Night_-_Google_Art_Project.jpg",
-  },
-  {
-    id: 3,
-    title: "Krzyyk",
-    artist: "Edvard Munch",
-    museum: "Muzeum Narodowe w Oslo",
-    dateAdded: "1 tydzień temu",
-    image:
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73_cm%2C_National_Gallery_of_Norway.jpg/300px-Edvard_Munch%2C_1893%2C_The_Scream%2C_oil%2C_tempera_and_pastel_on_cardboard%2C_91_x_73_cm%2C_National_Gallery_of_Norway.jpg",
-  },
-];
+interface LocationGroup {
+  location: string;
+  conversations: Conversation[];
+}
 
 export default function CollectionScreen() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [groupedConversations, setGroupedConversations] = useState<LocationGroup[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [collapsedSections, setCollapsedSections] = useState<{ [key: string]: boolean }>({});
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  const loadConversations = async () => {
+    try {
+      setIsLoading(true);
+      const data = await conversationService.getConversations();
+      setConversations(data);
+
+      // Group conversations by location
+      const grouped = groupConversationsByLocation(data);
+      setGroupedConversations(grouped);
+    } catch (error) {
+      console.error("Error loading conversations:", error);
+      Alert.alert("Błąd", "Nie udało się załadować kolekcji");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const groupConversationsByLocation = (conversations: Conversation[]): LocationGroup[] => {
+    const groups: { [key: string]: Conversation[] } = {};
+
+    conversations.forEach((conversation) => {
+      // Prioritize artwork location over user location
+      let locationKey = "Nieznana lokalizacja";
+
+      if (conversation.location_name) {
+        locationKey = conversation.location_name;
+      } else if (conversation.location_address) {
+        // Extract meaningful part from address (remove house numbers, etc.)
+        const addressParts = conversation.location_address.split(',');
+        locationKey = addressParts.length > 1 ? addressParts[addressParts.length - 2].trim() : conversation.location_address;
+      }
+
+      if (!groups[locationKey]) {
+        groups[locationKey] = [];
+      }
+      groups[locationKey].push(conversation);
+    });
+
+    // Sort groups by number of conversations (descending)
+    return Object.entries(groups)
+      .map(([location, conversations]) => ({
+        location,
+        conversations: conversations.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      }))
+      .sort((a, b) => b.conversations.length - a.conversations.length);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) return "Dzisiaj";
+    if (diffDays === 2) return "Wczoraj";
+    if (diffDays <= 7) return `${diffDays} dni temu`;
+    if (diffDays <= 30) return `${Math.ceil(diffDays / 7)} tyg. temu`;
+    return `${Math.ceil(diffDays / 30)} mies. temu`;
+  };
+
+  const handleConversationPress = (conversation: Conversation) => {
+    router.push({
+      pathname: "/artwork-chat",
+      params: {
+        conversationId: conversation.id,
+        imageUri: conversation.artwork_image_url ? encodeURIComponent(conversation.artwork_image_url) : undefined,
+      },
+    });
+  };
+
+  const handleScanPress = () => {
+    router.push("/scan-artwork");
+  };
+
+  const toggleSection = (location: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [location]: !prev[location]
+    }));
+  };
+
+  const isSectionCollapsed = (location: string) => {
+    // Default to collapsed (true) if not explicitly set to expanded (false)
+    return collapsedSections[location] !== false;
+  };
+  if (isLoading) {
+    return (
+      <HeaderContainer title="Moja kolekcja" onBackPress={() => router.push("/")} showHomeButton={true}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#667eea" />
+          <Text style={styles.loadingText}>Ładowanie kolekcji...</Text>
+        </View>
+      </HeaderContainer>
+    );
+  }
+
   return (
-    <HeaderContainer title="Moja kolekcja">
+    <HeaderContainer title="Moja kolekcja" onBackPress={() => router.push("/")} showHomeButton={true}>
       <ScrollView
         style={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -56,73 +139,114 @@ export default function CollectionScreen() {
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Ionicons name="images-outline" size={24} color="#667eea" />
-            <Text style={styles.statNumber}>{collectionItems.length}</Text>
+            <Text style={styles.statNumber}>{conversations.length}</Text>
             <Text style={styles.statLabel}>Dzieła</Text>
           </View>
           <View style={styles.statCard}>
-            <Ionicons name="business-outline" size={24} color="#4ecdc4" />
-            <Text style={styles.statNumber}>3</Text>
-            <Text style={styles.statLabel}>Muzea</Text>
+            <Ionicons name="location-outline" size={24} color="#4ecdc4" />
+            <Text style={styles.statNumber}>{groupedConversations.length}</Text>
+            <Text style={styles.statLabel}>Lokalizacje</Text>
           </View>
           <View style={styles.statCard}>
-            <Ionicons name="heart-outline" size={24} color="#f093fb" />
-            <Text style={styles.statNumber}>12</Text>
-            <Text style={styles.statLabel}>Ulubione</Text>
+            <Ionicons name="time-outline" size={24} color="#f093fb" />
+            <Text style={styles.statNumber}>
+              {conversations.filter(c => new Date(c.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length}
+            </Text>
+            <Text style={styles.statLabel}>Ten tydzień</Text>
           </View>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Ostatnio dodane</Text>
-          <TouchableOpacity>
-            <Text style={styles.seeAllText}>Zobacz wszystkie</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.collectionGrid}>
-          {collectionItems.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.collectionCard}
-              activeOpacity={0.8}
-            >
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{ uri: item.image }}
-                  style={styles.artworkImage}
-                  resizeMode="cover"
-                />
-                <View style={styles.favoriteIcon}>
-                  <Ionicons name="heart-outline" size={16} color="#FFFFFF" />
-                </View>
-              </View>
-
-              <View style={styles.cardContent}>
-                <Text style={styles.artworkTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <Text style={styles.artistName} numberOfLines={1}>
-                  {item.artist}
-                </Text>
-                <Text style={styles.museumName} numberOfLines={1}>
-                  {item.museum}
-                </Text>
-                <Text style={styles.dateAdded}>{item.dateAdded}</Text>
-              </View>
+        {groupedConversations.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="images-outline" size={48} color="#94A3B8" />
+            <Text style={styles.emptyStateTitle}>Twoja kolekcja jest pusta</Text>
+            <Text style={styles.emptyStateText}>
+              Zeskanuj pierwsze dzieło sztuki, aby rozpocząć swoją kolekcję
+            </Text>
+            <TouchableOpacity style={styles.scanButton} onPress={handleScanPress}>
+              <Ionicons name="camera" size={20} color="#FFFFFF" />
+              <Text style={styles.scanButtonText}>Skanuj dzieło</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          </View>
+        ) : (
+          <>
+            {groupedConversations.map((group, groupIndex) => (
+              <View key={groupIndex} style={styles.locationGroup}>
+                <TouchableOpacity
+                  style={styles.locationHeader}
+                  onPress={() => toggleSection(group.location)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="location" size={20} color="#667eea" />
+                  <Text style={styles.locationTitle}>{group.location}</Text>
+                  <Text style={styles.locationCount}>({group.conversations.length})</Text>
+                  <Ionicons
+                    name={isSectionCollapsed(group.location) ? "chevron-down" : "chevron-up"}
+                    size={20}
+                    color="#667eea"
+                  />
+                </TouchableOpacity>
 
-        <View style={styles.emptyStateContainer}>
-          <Ionicons name="add-circle-outline" size={48} color="#94A3B8" />
-          <Text style={styles.emptyStateTitle}>Dodaj więcej dzieł</Text>
-          <Text style={styles.emptyStateText}>
-            Skanuj dzieła sztuki w muzeach, aby rozbudować swoją kolekcję
-          </Text>
-          <TouchableOpacity style={styles.scanButton}>
-            <Ionicons name="camera" size={20} color="#FFFFFF" />
-            <Text style={styles.scanButtonText}>Skanuj dzieło</Text>
-          </TouchableOpacity>
-        </View>
+                {!isSectionCollapsed(group.location) && (
+                  <View style={styles.collectionGrid}>
+                    {group.conversations.map((conversation) => (
+                    <TouchableOpacity
+                      key={conversation.id}
+                      style={styles.collectionCard}
+                      onPress={() => handleConversationPress(conversation)}
+                      activeOpacity={0.8}
+                    >
+                      {conversation.artwork_image_url ? (
+                        <View style={styles.imageContainer}>
+                          <Image
+                            source={{ uri: conversation.artwork_image_url }}
+                            style={styles.artworkImage}
+                            resizeMode="cover"
+                          />
+                        </View>
+                      ) : (
+                        <View style={[styles.imageContainer, styles.placeholderImage]}>
+                          <Ionicons name="image-outline" size={32} color="#94A3B8" />
+                        </View>
+                      )}
+
+                      <View style={styles.cardContent}>
+                        <Text style={styles.artworkTitle} numberOfLines={2}>
+                          {conversation.artwork_title ||
+                           (conversation.title !== "Analiza dzieła sztuki" ? conversation.title : "Dzieło bez tytułu")}
+                        </Text>
+                        {conversation.artwork_artist && (
+                          <Text style={styles.artistName} numberOfLines={1}>
+                            {conversation.artwork_artist}
+                          </Text>
+                        )}
+                        {conversation.artwork_period && (
+                          <Text style={styles.periodText} numberOfLines={1}>
+                            {conversation.artwork_period}
+                          </Text>
+                        )}
+                        <Text style={styles.museumName} numberOfLines={1}>
+                          {group.location}
+                        </Text>
+                        <Text style={styles.dateAdded}>
+                          {formatDate(conversation.created_at)}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+
+            <View style={styles.addMoreContainer}>
+              <TouchableOpacity style={styles.scanButton} onPress={handleScanPress}>
+                <Ionicons name="camera" size={20} color="#FFFFFF" />
+                <Text style={styles.scanButtonText}>Skanuj więcej dzieł</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </ScrollView>
       <SafeAreaView style={styles.bottomSafeArea} />
     </HeaderContainer>
@@ -273,6 +397,12 @@ const styles = StyleSheet.create({
     color: "#667eea",
     marginBottom: 4,
   },
+  periodText: {
+    fontSize: 12,
+    color: "#94A3B8",
+    fontStyle: "italic",
+    marginBottom: 4,
+  },
   museumName: {
     fontSize: 12,
     color: "#64748B",
@@ -314,5 +444,46 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#64748B",
+    marginTop: 16,
+  },
+  locationGroup: {
+    marginBottom: 32,
+  },
+  locationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  locationTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#1E293B",
+    marginLeft: 8,
+    flex: 1,
+  },
+  locationCount: {
+    fontSize: 14,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  placeholderImage: {
+    backgroundColor: "#F1F5F9",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addMoreContainer: {
+    alignItems: "center",
+    paddingVertical: 20,
   },
 });

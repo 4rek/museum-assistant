@@ -18,7 +18,7 @@ export default function PhotoAnalysisScreen() {
   };
 
   return (
-    <HeaderContainer title="Photo Analysis">
+    <HeaderContainer title="Photo Analysis" showHomeButton={true}>
       <View style={styles.container}>
         <PhotoPicker
           onAnalysisComplete={handleAnalysisComplete}

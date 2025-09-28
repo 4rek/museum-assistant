@@ -9,6 +9,7 @@ interface HeaderContainerProps {
   title: string;
   onBackPress?: () => void;
   rightButton?: ReactNode;
+  showHomeButton?: boolean;
   children: ReactNode;
 }
 
@@ -16,6 +17,7 @@ export default function HeaderContainer({
   title,
   onBackPress,
   rightButton,
+  showHomeButton = false,
   children,
 }: HeaderContainerProps) {
   const handleBackPress = () => {
@@ -23,6 +25,28 @@ export default function HeaderContainer({
       onBackPress();
     } else {
       router.back();
+    }
+  };
+
+  const handleHomePress = () => {
+    router.push("/");
+  };
+
+  // Create home button if showHomeButton is true and no rightButton is provided
+  const renderRightButton = () => {
+    if (rightButton) {
+      return rightButton;
+    } else if (showHomeButton) {
+      return (
+        <TouchableOpacity
+          style={styles.homeButton}
+          onPress={handleHomePress}
+        >
+          <Ionicons name="home" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      );
+    } else {
+      return <View style={styles.placeholder} />;
     }
   };
 
@@ -42,7 +66,7 @@ export default function HeaderContainer({
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{title}</Text>
             <View style={styles.rightButtonContainer}>
-              {rightButton || <View style={styles.placeholder} />}
+              {renderRightButton()}
             </View>
           </View>
         </SafeAreaView>
@@ -72,6 +96,13 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   backButton: {
+    padding: 8,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  homeButton: {
     padding: 8,
     width: 40,
     height: 40,

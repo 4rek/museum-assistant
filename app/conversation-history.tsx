@@ -97,7 +97,7 @@ export default function ConversationHistoryScreen() {
   )
 
   return (
-    <HeaderContainer title="Historia rozmów">
+    <HeaderContainer title="Historia rozmów" showHomeButton={true}>
       <View style={styles.container}>
         {isLoading && conversations.length === 0 ? (
           <View style={styles.emptyContainer}>

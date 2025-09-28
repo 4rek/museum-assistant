@@ -56,7 +56,60 @@ serve(async (req) => {
     const url = new URL(req.url);
     const conversationId = url.searchParams.get("conversationId");
 
-    if (req.method === "GET") {
+    if (req.method === "POST") {
+      // Create new conversation
+      const { title, artworkImageUrl } = await req.json();
+
+      if (!title) {
+        return new Response(
+          JSON.stringify({ error: "Title is required" }),
+          {
+            status: 400,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      }
+
+      const { data: newConversation, error: createError } = await supabase
+        .from("conversations")
+        .insert({
+          user_id: user.id,
+          title: title,
+          artwork_image_url: artworkImageUrl || null,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        console.error("Error creating conversation:", createError);
+        return new Response(
+          JSON.stringify({ error: "Failed to create conversation" }),
+          {
+            status: 500,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          conversationId: newConversation.id,
+          conversation: newConversation,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    } else if (req.method === "GET") {
       if (conversationId) {
         // Get specific conversation with messages
         const { data: conversation, error: convError } = await supabase
